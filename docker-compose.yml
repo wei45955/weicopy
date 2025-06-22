@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - weicopy-data:/app/data
+      - weicopy-uploads:/app/uploads
+    environment:
+      - GIN_MODE=release
+      - JWT_SECRET=your_secret_key_change_this_in_production
+      - JWT_EXPIRATION_HOURS=24
+      - ENABLE_REGISTRATION=false
+      - MAX_UPLOAD_SIZE_MB=50
+    # 不暴露端口，由前端代理访问
+    # ports:
+    #   - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    # 不暴露端口，由用户自行配置
+    # ports:
+    #   - "80:80"
+
+volumes:
+  weicopy-data:
+    driver: local
+  weicopy-uploads:
+    driver: local
