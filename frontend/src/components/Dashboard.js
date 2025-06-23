@@ -57,21 +57,40 @@ const Dashboard = () => {
   const fileInputRef = useRef(null);
   const pasteAreaRef = useRef(null);
   
-  // 轮询间隔（毫秒）
-  const POLLING_INTERVAL = 10000; // 10秒
-  
-  // 初始加载和轮询设置
-  useEffect(() => {
+  // Polling interval (ms)
+  const POLLING_INTERVAL = 10000;
+  const intervalRef = useRef(null);
+
+  // Start/restart polling
+  const startPolling = useCallback(() => {
+    // Clear existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    // Initial fetch
     fetchClipboardItems();
     
-    // 设置轮询
-    const intervalId = setInterval(() => {
+    // Set new interval
+    intervalRef.current = setInterval(() => {
       fetchClipboardItems();
     }, POLLING_INTERVAL);
-    
-    // 清理函数
-    return () => clearInterval(intervalId);
   }, []);
+
+  // Initial setup and cleanup
+  useEffect(() => {
+    startPolling();
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [startPolling]);
+
+  // Modify refresh button handler
+  const handleManualRefresh = () => {
+    startPolling(); // This will restart the polling
+  };
   
   // 粘贴事件监听
   useEffect(() => {
@@ -305,7 +324,7 @@ const Dashboard = () => {
         </Typography>
         <Box>
           <Tooltip title="刷新">
-            <IconButton onClick={fetchClipboardItems} disabled={loading}>
+            <IconButton onClick={handleManualRefresh} disabled={loading}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
