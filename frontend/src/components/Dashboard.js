@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import {
@@ -283,24 +283,7 @@ const Dashboard = () => {
                 )}
                 
                 {item.type === ITEM_TYPES.IMAGE && (
-                  <Box sx={{ textAlign: 'center' }}>
-                    <CardMedia
-                      component="img"
-                      image={`/api/clipboard/file/${item.id}`}
-                      alt="剪贴板图片"
-                      sx={{ maxHeight: 300, width: 'auto', margin: '0 auto' }}
-                    />
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      startIcon={<CopyIcon />} 
-                      sx={{ mt: 1 }}
-                      href={`/api/clipboard/file/${item.id}`}
-                      target="_blank"
-                    >
-                      查看原图
-                    </Button>
-                  </Box>
+                  <ImageWithAuth itemId={item.id} />
                 )}
                 
                 {item.type === ITEM_TYPES.FILE && (
@@ -489,6 +472,71 @@ const Dashboard = () => {
         </Alert>
       </Snackbar>
     </Container>
+  );
+};
+
+const ImageWithAuth = ({ itemId }) => {
+  const [imageUrl, setImageUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const abortControllerRef = useRef(null);
+
+  // Stable fetch function with cleanup
+  const fetchImage = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      const response = await axios.get(`/api/clipboard/file/${itemId}`, {
+        responseType: 'blob',
+        signal: abortControllerRef.current.signal
+      });
+      const url = URL.createObjectURL(response.data);
+      setImageUrl(url);
+    } catch (err) {
+      if (!axios.isCancel(err)) {
+        console.error('Failed to load image', err);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [itemId]); // Only recreate when itemId changes
+
+  useEffect(() => {
+    fetchImage();
+    return () => {
+      abortControllerRef.current?.abort();
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
+      }
+    };
+  }, [fetchImage]); // Only run when fetchImage changes
+
+  if (loading) return <CircularProgress size={24} />;
+
+  return (
+    <Box sx={{ textAlign: 'center' }}>
+      <CardMedia
+        component="img"
+        image={imageUrl}
+        alt="剪贴板图片"
+        sx={{ maxHeight: 300, width: 'auto', margin: '0 auto' }}
+      />
+      <Button 
+        variant="outlined" 
+        size="small" 
+        startIcon={<CopyIcon />} 
+        sx={{ mt: 1 }}
+        onClick={async () => {
+          const response = await axios.get(`/api/clipboard/file/${itemId}`, {
+            responseType: 'blob'
+          });
+          const url = URL.createObjectURL(response.data);
+          window.open(url, '_blank');
+        }}
+      >
+        查看原图
+      </Button>
+    </Box>
   );
 };
 
