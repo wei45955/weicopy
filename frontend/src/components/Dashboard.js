@@ -287,21 +287,7 @@ const Dashboard = () => {
                 )}
                 
                 {item.type === ITEM_TYPES.FILE && (
-                  <Box>
-                    <Typography variant="body1">
-                      {item.filename}
-                    </Typography>
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      startIcon={<CopyIcon />} 
-                      sx={{ mt: 1 }}
-                      href={`/api/clipboard/file/${item.id}`}
-                      download={item.filename}
-                    >
-                      下载文件
-                    </Button>
-                  </Box>
+                  <FileDownloadWithAuth itemId={item.id} filename={item.filename} />
                 )}
               </CardContent>
             </Card>
@@ -535,6 +521,53 @@ const ImageWithAuth = ({ itemId }) => {
         }}
       >
         查看原图
+      </Button>
+    </Box>
+  );
+};
+
+const FileDownloadWithAuth = ({ itemId, filename }) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`/api/clipboard/file/${itemId}`, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('File download failed', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography variant="body1">
+        {filename}
+      </Typography>
+      <Button 
+        variant="outlined" 
+        size="small" 
+        startIcon={loading ? <CircularProgress size={16} /> : <CopyIcon />}
+        sx={{ mt: 1 }}
+        onClick={handleDownload}
+        disabled={loading}
+      >
+        {loading ? '下载中...' : '下载文件'}
       </Button>
     </Box>
   );
