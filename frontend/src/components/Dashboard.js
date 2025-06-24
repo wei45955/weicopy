@@ -62,6 +62,9 @@ const Dashboard = () => {
   const intervalRef = useRef(null);
 
   // Start/restart polling
+  // useCallback 是 React 提供的一个 Hook，它的主要作用是优化性能，防止在组件重新渲染时，不必要地重新创建函数。 可以把它想象成一个“函数记忆器”或者“函数缓存器”。
+  // 当组件第一次渲染时，useCallback 会执行你的函数定义，并把这个函数实例“记住”下来。
+  // 在后续的渲染中，useCallback 会比较依赖项数组里的值。
   const startPolling = useCallback(() => {
     // Clear existing interval
     if (intervalRef.current) {
@@ -78,6 +81,9 @@ const Dashboard = () => {
   }, []);
 
   // Initial setup and cleanup
+  // useEffect 返回的函数是一个可选的 清理函数 (Cleanup Function)
+  // 它的作用是在下一次 Effect 执行之前（如果依赖项发生变化）或者《组件卸载》时，执行一些清理操作。
+  // useEffect 是 React 中用于处理副作用的 Hook。它执行的时机取决于它的依赖项数组。
   useEffect(() => {
     startPolling();
     return () => {
@@ -85,7 +91,8 @@ const Dashboard = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [startPolling]);
+  }, [startPolling]); 
+  // useEffect  依赖了 startPolling 而 startPolling 是 useCallback 创建的，这样可以避免不必要的重复触发
 
   // Modify refresh button handler
   const handleManualRefresh = () => {
