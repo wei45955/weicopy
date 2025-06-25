@@ -15,7 +15,7 @@ services:
       - MAX_UPLOAD_SIZE_MB=50
     # 不暴露端口，由前端代理访问
     # ports:
-    #   - "8080:8080"
+    #   - "8081:8081"
 
   frontend:
     build:
@@ -25,11 +25,22 @@ services:
     depends_on:
       - backend
     # 不暴露端口，由用户自行配置
-    # ports:
-    #   - "80:80"
+    ports:
+      - "8080:80"
 
 volumes:
   weicopy-data:
     driver: local
   weicopy-uploads:
     driver: local
+
+
+# some CMD
+# Build images manually
+# docker compose build
+# docker compose build (optional sevice:frontend)
+
+# docker compose up
+# docker compose up -d
+
+# docker compose down

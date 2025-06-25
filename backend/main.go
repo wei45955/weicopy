@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// 启动服务器
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8081")
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

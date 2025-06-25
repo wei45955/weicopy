@@ -1,4 +1,8 @@
-FROM golang:1.19-alpine AS builder
+# 确保使用支持CGO的基础镜像（如加装gcc的alpine）
+FROM golang:1.21-alpine AS builder
+
+# 安装SQLite3依赖（关键步骤）
+RUN apk add --no-cache gcc musl-dev
 
 # 设置工作目录
 WORKDIR /app
@@ -16,7 +20,7 @@ RUN go mod download
 COPY . .
 
 # 构建应用
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o weicopy .
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o weicopy .
 
 # 最终镜像
 FROM alpine:latest
@@ -37,12 +41,12 @@ RUN mkdir -p /app/data /app/uploads
 
 # 设置环境变量
 ENV GIN_MODE=release
-ENV PORT=8080
+ENV PORT=8081
 ENV DB_PATH=/app/data/weicopy.db
 ENV UPLOAD_PATH=/app/uploads
 ENV MAX_UPLOAD_SIZE_MB=50
 ENV ENABLE_REGISTRATION=false
 
-EXPOSE 8080
+EXPOSE 8081
 
 CMD ["./weicopy"]
