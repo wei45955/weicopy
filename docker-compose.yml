@@ -1,46 +1,17 @@
+# 页面和 /api 都由这一个服务提供。外面的 Nginx 反代到 8080 即可。
 services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  weicopy:
+    build: .
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     volumes:
       - weicopy-data:/app/data
       - weicopy-uploads:/app/uploads
     environment:
-      - GIN_MODE=release
-      - JWT_SECRET=your_secret_key_change_this_in_production
-      - JWT_EXPIRATION_HOURS=24
-      - ENABLE_REGISTRATION=false
-      - MAX_UPLOAD_SIZE_MB=50
-    # 不暴露端口，由前端代理访问
-    # ports:
-    #   - "8081:8081"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - backend
-    # 不暴露端口，由用户自行配置
-    ports:
-      - "8080:80"
+      GIN_MODE: release
+      MAX_UPLOAD_SIZE_MB: "50"
 
 volumes:
   weicopy-data:
-    driver: local
   weicopy-uploads:
-    driver: local
-
-
-# some CMD
-# Build images manually
-# docker compose build
-# docker compose build (optional sevice:frontend)
-
-# docker compose up
-# docker compose up -d
-
-# docker compose down

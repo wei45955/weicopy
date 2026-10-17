@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,36 +14,85 @@ import (
 
 var DB *gorm.DB
 
-// ConnectDatabase 初始化数据库连接
-func ConnectDatabase() {
-	// 确保数据库目录存在
+func ConnectDatabase() error {
 	dbPath := config.GetDBPath()
-	dbDir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Fatalf("Failed to create database directory: %v", err)
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		return fmt.Errorf("create database directory: %w", err)
+	}
+	if err := os.MkdirAll(config.GetUploadPath(), 0755); err != nil {
+		return fmt.Errorf("create upload directory: %w", err)
 	}
 
-	// 确保上传目录存在
-	uploadPath := config.GetUploadPath()
-	if err := os.MkdirAll(uploadPath, 0755); err != nil {
-		log.Fatalf("Failed to create upload directory: %v", err)
+	logMode := logger.Info
+	if os.Getenv("GIN_MODE") == "release" {
+		logMode = logger.Warn
 	}
-
-	// 配置数据库
-	database, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+	dsn := dbPath + "?_busy_timeout=5000&_journal_mode=WAL"
+	database, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logMode),
 	})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		return fmt.Errorf("open database: %w", err)
 	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	sqlDB.SetMaxOpenConns(4)
+	sqlDB.SetMaxIdleConns(2)
 
-	// 设置全局变量
+	if err := dropLegacy(database); err != nil {
+		return err
+	}
+	if err := database.AutoMigrate(&Session{}, &ClipboardItem{}); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
 	DB = database
-
-	// 自动迁移数据库模型
-	if err := DB.AutoMigrate(&User{}, &ClipboardItem{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+	if n, err := PurgeExpired(); err != nil {
+		return err
+	} else if n > 0 {
+		log.Printf("purged %d expired session(s)", n)
 	}
+	log.Println("database ready")
+	return nil
+}
 
-	log.Println("Database connected and migrated successfully")
+func dropLegacy(db *gorm.DB) error {
+	hasUsers := tableExists(db, "users")
+	hasUserID := columnExists(db, "clipboard_items", "user_id")
+	if !hasUsers && !hasUserID {
+		return nil
+	}
+	log.Println("removing legacy account data")
+	if hasUsers {
+		if err := db.Exec("DROP TABLE IF EXISTS users").Error; err != nil {
+			return err
+		}
+	}
+	if hasUserID {
+		if err := db.Exec("DROP TABLE IF EXISTS clipboard_items").Error; err != nil {
+			return err
+		}
+		if err := db.Exec("DROP TABLE IF EXISTS sessions").Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func tableExists(db *gorm.DB, name string) bool {
+	var n int
+	db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&n)
+	return n > 0
+}
+
+func columnExists(db *gorm.DB, table, column string) bool {
+	if !tableExists(db, table) {
+		return false
+	}
+	var n int
+	// pragma_table_info does not accept a bound parameter for the table name.
+	query := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?", table)
+	db.Raw(query, column).Scan(&n)
+	return n > 0
 }

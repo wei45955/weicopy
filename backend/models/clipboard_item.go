@@ -2,121 +2,111 @@ package models
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-// 剪贴板项目类型
 const (
 	TypeText  = "text"
 	TypeImage = "image"
 	TypeFile  = "file"
 )
 
-// ClipboardItem 剪贴板项目模型
 type ClipboardItem struct {
-	ID        string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
-	Type      string    `gorm:"size:10;not null" json:"type"`
-	Content   string    `gorm:"type:text" json:"content"`
-	Filename  string    `gorm:"size:255" json:"filename,omitempty"`
-	FilePath  string    `gorm:"size:255" json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	SessionID   string    `gorm:"index;not null" json:"-"`
+	Type        string    `gorm:"size:10;not null" json:"type"`
+	Content     string    `gorm:"type:text" json:"content,omitempty"`
+	Filename    string    `gorm:"size:255" json:"filename,omitempty"`
+	FilePath    string    `gorm:"size:512" json:"-"`
+	ContentType string    `gorm:"size:100" json:"-"`
+	Size        int64     `json:"size"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// BeforeCreate 创建前的钩子，用于生成UUID
-func (ci *ClipboardItem) BeforeCreate(tx *gorm.DB) error {
-	ci.ID = uuid.New().String()
+func (ClipboardItem) TableName() string { return "clipboard_items" }
+
+func (item *ClipboardItem) BeforeCreate(tx *gorm.DB) error {
+	if item.ID == "" {
+		item.ID = uuid.NewString()
+	}
 	return nil
 }
 
-// GetClipboardItemsByUserID 获取用户的所有剪贴板项目
-func GetClipboardItemsByUserID(userID uint) ([]ClipboardItem, error) {
-	var items []ClipboardItem
-	result := DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&items)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return items, nil
+func ListItems(sessionID string) ([]ClipboardItem, error) {
+	items := make([]ClipboardItem, 0)
+	err := DB.Where("session_id = ?", sessionID).Order("created_at DESC").Find(&items).Error
+	return items, err
 }
 
-// GetLatestClipboardItemByUserID 获取用户的最新剪贴板项目
-func GetLatestClipboardItemByUserID(userID uint) (*ClipboardItem, error) {
+func GetLatestItem(sessionID string) (*ClipboardItem, error) {
 	var item ClipboardItem
-	result := DB.Where("user_id = ?", userID).Order("created_at DESC").First(&item)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, errors.New("no clipboard items found")
-		}
-		return nil, result.Error
+	err := DB.Where("session_id = ?", sessionID).Order("created_at DESC").First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &item, nil
 }
 
-// GetClipboardItemByID 通过ID获取剪贴板项目
-func GetClipboardItemByID(id string) (*ClipboardItem, error) {
+func GetItem(sessionID, id string) (*ClipboardItem, error) {
 	var item ClipboardItem
-	result := DB.Where("id = ?", id).First(&item)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, errors.New("clipboard item not found")
-		}
-		return nil, result.Error
+	err := DB.Where("id = ? AND session_id = ?", id, sessionID).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &item, nil
 }
 
-// CreateTextItem 创建文本类型的剪贴板项目
-func CreateTextItem(userID uint, content string) (*ClipboardItem, error) {
-	item := ClipboardItem{
-		UserID:  userID,
-		Type:    TypeText,
-		Content: content,
+func CreateTextItem(sessionID, content string) (*ClipboardItem, error) {
+	item := &ClipboardItem{
+		SessionID: sessionID,
+		Type:      TypeText,
+		Content:   content,
+		Size:      int64(len(content)),
 	}
-
-	result := DB.Create(&item)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := DB.Create(item).Error; err != nil {
+		return nil, err
 	}
-
-	return &item, nil
+	return item, nil
 }
 
-// CreateFileItem 创建文件类型的剪贴板项目
-func CreateFileItem(userID uint, filename, filePath string, isImage bool) (*ClipboardItem, error) {
-	itemType := TypeFile
-	if isImage {
-		itemType = TypeImage
-	}
-
-	item := ClipboardItem{
-		UserID:   userID,
-		Type:     itemType,
-		Filename: filename,
-		FilePath: filePath,
-	}
-
-	result := DB.Create(&item)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	return &item, nil
+func CreateFileItem(item *ClipboardItem) error {
+	return DB.Create(item).Error
 }
 
-// DeleteClipboardItem 删除剪贴板项目
-func DeleteClipboardItem(id string, userID uint) error {
-	result := DB.Where("id = ? AND user_id = ?", id, userID).Delete(&ClipboardItem{})
-	if result.Error != nil {
-		return result.Error
+func UpdateTextItem(sessionID, id, content string) (*ClipboardItem, error) {
+	item, err := GetItem(sessionID, id)
+	if err != nil {
+		return nil, err
 	}
-
-	if result.RowsAffected == 0 {
-		return errors.New("clipboard item not found or not owned by user")
+	if item.Type != TypeText {
+		return nil, ErrNotText
 	}
+	item.Content = content
+	item.Size = int64(len(content))
+	if err := DB.Save(item).Error; err != nil {
+		return nil, err
+	}
+	return item, nil
+}
 
-	return nil
+func DeleteItem(sessionID, id string) error {
+	item, err := GetItem(sessionID, id)
+	if err != nil {
+		return err
+	}
+	if item.FilePath != "" {
+		_ = os.Remove(item.FilePath)
+	}
+	return DB.Delete(&ClipboardItem{}, "id = ? AND session_id = ?", id, sessionID).Error
 }

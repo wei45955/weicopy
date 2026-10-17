@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>WeiCopy</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-view="loading">
+  <div id="app">
+    <main class="shell">
+      <p class="muted">正在打开…</p>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <aside class="api-note">
+    <p>选一个会话名即可跨设备共享，默认保留 30 分钟，时长填 0 则永久。会话没有密码时，接口不要带 Authorization。有密码时，把密码原文放进 Authorization，不要写 Bearer。</p>
+    <details>
+      <summary>curl</summary>
+      <pre id="api-curl">把 HOST 换成这个网站的地址。没密码时不要加 Authorization。有密码时每条命令加上 -H "Authorization: 密码"，不要 Bearer。
+
+curl -X POST HOST/api/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"name":"weicopy","password":"","ttl_minutes":30}'
+
+curl -X POST HOST/api/sessions/weicopy/items/text \
+  -H "Content-Type: text/plain" \
+  --data-binary "你好"
+
+curl -X POST HOST/api/sessions/weicopy/items/file \
+  -F "file=@/path/to/file"
+
+curl HOST/api/sessions/weicopy/state
+
+curl "HOST/api/sessions/weicopy/items/latest?raw=1"
+
+curl -X PUT HOST/api/sessions/weicopy/items/ITEM_ID \
+  -H "Content-Type: application/json" \
+  -d '{"content":"新内容"}'
+
+curl -X DELETE HOST/api/sessions/weicopy/items/ITEM_ID
+
+curl -X DELETE HOST/api/sessions/weicopy</pre>
+    </details>
+  </aside>
+  <noscript><p class="muted">需要启用 JavaScript 才能使用页面。接口说明在上面的 curl 里，不依赖脚本。</p></noscript>
+  <script src="/static/app.js"></script>
+</body>
+</html>
