@@ -1068,56 +1068,133 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const queryName = (params.get("s") || "").trim();
   const stored = loadLocal();
-  if (stored && (!queryName || queryName === stored.name)) {
-    let status;
-    try {
-      status = await api("/api/sessions/status?name=" + encodeURIComponent(stored.name));
-    } catch (err) {
-      showGate({
-        mode: "enter",
-        name: stored.name,
-        ttl: stored.ttlMinutes,
-        message: err.message,
-        messageKind: "error",
-      });
-      return;
-    }
-    if (!status.exists) {
-      showExpired(stored);
-      return;
-    }
-    if (!stored.paused) {
-      try {
-        const state = await api(sessionURL(stored.name, "/state"), { password: stored.password });
-        await showRoom(stored.password, state.session, state.items);
-        return;
-      } catch (err) {
-        if (err.status === 410) {
-          showExpired(stored);
-          return;
-        }
-        if (err.status !== 401) {
-          showGate({
-            mode: "join",
-            name: stored.name,
-            hasPassword: status.has_password,
-            ttl: status.ttl_minutes,
-            message: err.message,
-            messageKind: "error",
-          });
-          return;
-        }
-      }
-    }
+  if (queryName) {
+    await bootFromLink(queryName, stored && stored.name === queryName ? stored : null);
+    return;
+  }
+  if (!stored) {
+    showGate({ mode: "enter", ttl: 30 });
+    return;
+  }
+  await restoreStored(stored);
+}
+
+async function bootFromLink(name, stored) {
+  let status;
+  try {
+    status = await api("/api/sessions/status?name=" + encodeURIComponent(name));
+  } catch (err) {
     showGate({
-      mode: "join",
-      name: stored.name,
-      hasPassword: status.has_password,
-      ttl: status.ttl_minutes,
+      mode: "enter",
+      name,
+      ttl: stored ? stored.ttlMinutes : 30,
+      message: err.message,
+      messageKind: "error",
     });
     return;
   }
-  showGate({ mode: "enter", name: queryName, ttl: 30 });
+  if (!status.exists) {
+    if (stored) showExpired(stored);
+    else showGate({ mode: "enter", name, ttl: 30 });
+    return;
+  }
+  if (!status.has_password) {
+    try {
+      await openSession(name, "");
+    } catch (err) {
+      if (err.status === 410) {
+        showExpired({ name, ttlMinutes: status.ttl_minutes });
+        return;
+      }
+      showGate({
+        mode: "join",
+        name,
+        hasPassword: false,
+        ttl: status.ttl_minutes,
+        message: err.message,
+        messageKind: "error",
+      });
+    }
+    return;
+  }
+  if (stored && !stored.paused && stored.password) {
+    try {
+      const state = await api(sessionURL(name, "/state"), { password: stored.password });
+      await showRoom(stored.password, state.session, state.items);
+      return;
+    } catch (err) {
+      if (err.status === 410) {
+        showExpired(stored);
+        return;
+      }
+      if (err.status !== 401) {
+        showGate({
+          mode: "join",
+          name,
+          hasPassword: true,
+          ttl: status.ttl_minutes,
+          message: err.message,
+          messageKind: "error",
+        });
+        return;
+      }
+    }
+  }
+  showGate({
+    mode: "join",
+    name,
+    hasPassword: true,
+    ttl: status.ttl_minutes,
+  });
+}
+
+async function restoreStored(stored) {
+  let status;
+  try {
+    status = await api("/api/sessions/status?name=" + encodeURIComponent(stored.name));
+  } catch (err) {
+    showGate({
+      mode: "enter",
+      name: stored.name,
+      ttl: stored.ttlMinutes,
+      message: err.message,
+      messageKind: "error",
+    });
+    return;
+  }
+  if (!status.exists) {
+    showExpired(stored);
+    return;
+  }
+  if (!stored.paused) {
+    try {
+      const state = await api(sessionURL(stored.name, "/state"), { password: stored.password });
+      await showRoom(stored.password, state.session, state.items);
+      return;
+    } catch (err) {
+      if (err.status === 410) {
+        showExpired(stored);
+        return;
+      }
+      if (err.status !== 401) {
+        showGate({
+          mode: "join",
+          name: stored.name,
+          hasPassword: status.has_password,
+          ttl: status.ttl_minutes,
+          message: err.message,
+          messageKind: "error",
+        });
+        return;
+      }
+    }
+  }
+  showGate({
+    mode: "join",
+    name: stored.name,
+    hasPassword: status.has_password,
+    ttl: status.ttl_minutes,
+  });
 }
 
 function init() {
