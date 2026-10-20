@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/glebarez/sqlite"
 	"github.com/weicopy/backend/config"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -27,7 +27,7 @@ func ConnectDatabase() error {
 	if os.Getenv("GIN_MODE") == "release" {
 		logMode = logger.Warn
 	}
-	dsn := dbPath + "?_busy_timeout=5000&_journal_mode=WAL"
+	dsn := "file:" + dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 	database, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logMode),
 	})
